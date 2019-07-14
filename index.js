@@ -1,7 +1,7 @@
 const TeleBot = require('telebot');
 const fs = require('fs');
 const request = require('request');
-const bot = new TeleBot(token);
+const bot = new TeleBot('894374302:AAE-N8TMTd3zomndSoKGoy4plTp7x7dowHE');
 
 let db = {};
 let rLimit = 10;
@@ -13,6 +13,7 @@ function updateUser(userId, subreddit, option, postNum) {
 function sendRedditPost(messageId, subreddit, option, postNum) {
     const options = getOptions(option, rLimit);
     var start = new Date();
+    console.log(`http://www.reddit.com/r/${subreddit}/${options}`)
     request({ url: `http://www.reddit.com/r/${subreddit}/${options}`, json: true }, function (error, response, body) {
         
         // check if response was successful
@@ -45,7 +46,10 @@ function sendRedditPost(messageId, subreddit, option, postNum) {
                 return sendImagePost(messageId, redditPost, markup);
             } else if (redditPost.preview && redditPost.preview.images[0].variants.mp4) {
                 // sendPlsWait(messageId);
-                sendGifPost(messageId, redditPost, markup);
+                if(!isGfycatPost(redditPost))
+                    sendGifPost(messageId, redditPost, markup);
+                else
+                    sendGfycatPost(messageId, redditPost, markup)
             } else {
                 return sendMessagePost(messageId, redditPost, markup);
             }
@@ -113,6 +117,21 @@ function sendGifPost(messageId, redditPost, markup) {
     gif = gif.replace(/&amp;/g, '&');
     const caption = redditPost.title;
     return bot.sendVideo(messageId, gif, {caption, markup});
+}
+
+function isGfycatPost(redditPost) {
+    return redditPost.media.type === 'gfycat.com';
+}
+
+function sendGfycatPost(messageId, redditPost, markup) {
+    if (redditPost.media.type === 'gfycat.com'){
+        let gifArr = redditPost.media.oembed.thumbnail_url;
+        let gif = gifArr.substring(26).replace('-size_restricted.gif', '.mp4');
+        gif = `https://giant.gfycat.com/${gif}`;
+        const caption = redditPost.title;
+        return bot.sendVideo(messageId, gif, {caption, markup});
+    }else
+        return false;
 }
 
 function sendMessagePost(messageId, redditPost, markup) {

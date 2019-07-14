@@ -4,6 +4,7 @@
   "description": "A Telegram bot to get Reddit posts.",
   "main": "index.js",
   "dependencies": {
+    "npm": "^6.10.1",
     "telebot": "^1.0.7"
   },
   "devDependencies": {},
