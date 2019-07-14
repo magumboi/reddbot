@@ -5,7 +5,9 @@
   "main": "index.js",
   "dependencies": {
     "npm": "^6.10.1",
-    "telebot": "^1.0.7"
+    "telebot": "^1.0.7",
+    "request": "^2.88.0",
+    "request-promise": "^4.2.4"
   },
   "devDependencies": {},
   "scripts": {

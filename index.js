@@ -1,10 +1,11 @@
 const TeleBot = require('telebot');
 const fs = require('fs');
+let rp = require('request-promise');
 const request = require('request');
 const bot = new TeleBot('894374302:AAE-N8TMTd3zomndSoKGoy4plTp7x7dowHE');
 
 let db = {};
-let rLimit = 10;
+let rLimit = 20;
 
 function updateUser(userId, subreddit, option, postNum) {
     db[userId] = {subreddit, option, postNum};
@@ -13,19 +14,17 @@ function updateUser(userId, subreddit, option, postNum) {
 function sendRedditPost(messageId, subreddit, option, postNum) {
     const options = getOptions(option, rLimit);
     var start = new Date();
-    console.log(`http://www.reddit.com/r/${subreddit}/${options}`)
-    request({ url: `http://www.reddit.com/r/${subreddit}/${options}`, json: true }, function (error, response, body) {
-        
-        // check if response was successful
-        if (!error && response.statusCode === 200) {   
-            
+    console.log(`http://www.reddit.com/r/${subreddit}/${options}`);
+    //sendPlsWait(messageId);
+    rp({ uri: `http://www.reddit.com/r/${subreddit}/${options}`, json: true })
+        .then(function (body) {
             // send error message if the bot encountered one
             if (body.hasOwnProperty('error') || body.data.children.length < 1) {
                 return sendErrorMsg(messageId);
             } else if (body.data.children.length - 1 < postNum) {
                 return noMorePosts(messageId);
             }
-            
+
             // reddit post data
             let redditPost = body.data.children[postNum].data;
             redditPost.title = redditPost.title.replace(/&amp;/g, '&');
@@ -39,8 +38,8 @@ function sendRedditPost(messageId, subreddit, option, postNum) {
             ]);
 
             // if post is an image or if it's a gif or a link
-            if (/\.(jpe?g|png)$/.test(redditPost.url) || 
-                redditPost.domain === 'i.reddituploads.com' || 
+            if (/\.(jpe?g|png)$/.test(redditPost.url) ||
+                redditPost.domain === 'i.reddituploads.com' ||
                 redditPost.domain === 'i.redd.it') {
                 // sendPlsWait(messageId);
                 return sendImagePost(messageId, redditPost, markup);
@@ -53,12 +52,11 @@ function sendRedditPost(messageId, subreddit, option, postNum) {
             } else {
                 return sendMessagePost(messageId, redditPost, markup);
             }
-            
-        // unsuccessful response
-        } else {
+        })
+        .catch(function (err) {
+            console.log(err);
             return sendErrorMsg(messageId);
-        }
-      });
+        });
 }
 
 // options
@@ -66,11 +64,11 @@ function getOptions(option, rlimit) {
     if (option === 'top') {
         return `top.json?t=day&limit=${rlimit}`;
     } else if (option === 'topw') {
-         return `top.json?t=week&limit=${rlimit}`;
+        return `top.json?t=week&limit=${rlimit}`;
     } else if (option === 'topm') {
-         return `top.json?t=month&limit=${rlimit}`;
+        return `top.json?t=month&limit=${rlimit}`;
     } else if (option === 'topy') {
-         return `top.json?t=year&limit=${rlimit}`;
+        return `top.json?t=year&limit=${rlimit}`;
     } else if (option === 'all') {
         return `top.json?t=all&limit=${rlimit}`;
     } else if (option === 'hot') {
@@ -87,6 +85,11 @@ function sendErrorMsg(messageId) {
     return bot.sendMessage(messageId, errorMsg);
 }
 
+function sendTryAgainMsg(messageId) {
+    const errorMsg = `Something went wrong, try again.`;
+    return bot.sendMessage(messageId, errorMsg);
+}
+
 function sendLimitMsg(messageId) {
     const errorMsg = `Sorry, we can't show more than ${rLimit} posts for one option. Please change your subreddit or option. 
 
@@ -99,10 +102,10 @@ function noMorePosts(messageId) {
     return bot.sendMessage(messageId, errorMsg);
 }
 
-/*function sendPlsWait(messageId) {
+function sendPlsWait(messageId) {
     const message = `Please wait...`;
     return bot.sendMessage(messageId, message);
-}*/
+}
 
 function sendImagePost(messageId, redditPost, markup) {
     let url = redditPost.url;
@@ -120,18 +123,23 @@ function sendGifPost(messageId, redditPost, markup) {
 }
 
 function isGfycatPost(redditPost) {
-    return redditPost.media.type === 'gfycat.com';
+    if(redditPost.media)
+        return redditPost.media.type === 'gfycat.com';
+    return false
 }
 
 function sendGfycatPost(messageId, redditPost, markup) {
-    if (redditPost.media.type === 'gfycat.com'){
-        let gifArr = redditPost.media.oembed.thumbnail_url;
-        let gif = gifArr.substring(26).replace('-size_restricted.gif', '.mp4');
-        gif = `https://giant.gfycat.com/${gif}`;
-        const caption = redditPost.title;
-        return bot.sendVideo(messageId, gif, {caption, markup});
-    }else
-        return false;
+    let gifArr = redditPost.media.oembed.thumbnail_url;
+    let gif = gifArr.substring(26).replace('-size_restricted.gif', '.mp4');
+    gif = `https://giant.gfycat.com/${gif}`;
+    const caption = redditPost.title;
+    return bot.sendVideo(messageId, gif, {caption, markup}).catch(function (err) {
+        console.log(err);
+        bot.sendVideo(messageId, gifArr, {caption, markup}).catch(function (err) {
+            console.log(err);
+            sendTryAgainMsg(messageId);
+        })
+    });
 }
 
 function sendMessagePost(messageId, redditPost, markup) {
@@ -167,41 +175,43 @@ Default option is *top*, so *cats* will return top posts of \`/r/cats\` from pas
         const messageId = msg.from.id;
         const [subreddit, option] = msg.text.toLowerCase().split(' ');
         const postNum = 0;
+        sendPlsWait(messageId);
         updateUser(userId, subreddit, option, postNum);
         sendRedditPost(messageId, subreddit, option, postNum);
-    }  
+    }
 });
 
 bot.on('callbackQuery', msg => {
     if (msg.data === 'callback_query_next') {
         const userId = `id_${msg.from.id}`;
         const messageId = msg.from.id;
-        let subreddit = '', 
-              option = '';
+        let subreddit = '',
+            option = '';
         let postNum = 0;
-        
+
         if (db[userId].hasOwnProperty('subreddit')) {
             subreddit = db[userId]['subreddit'];
         } else {
             return bot.sendMessage(messageId, 'Sorry, you should send the subreddit again');
         }
-        
+
         if (db[userId]['option']) {
             option = db[userId]['option'];
         } else {
             option = 'top';
         }
-        
+
         if (db[userId].hasOwnProperty('postNum')) {
             postNum = db[userId]['postNum'];
             postNum++;
         }
-        
+
         db[userId]['postNum'] = postNum;
-        
+
         if (postNum > rLimit - 1) {
             return sendLimitMsg(messageId);
         }
+        //sendPlsWait(messageId);
         sendRedditPost(messageId, subreddit, option, postNum);
     }
 });
