@@ -1,14 +1,123 @@
 const TeleBot = require('telebot');
 const fs = require('fs');
-let rp = require('request-promise');
-const request = require('request');
+const rp = require('request-promise');
+const schedule = require('node-schedule');
 const bot = new TeleBot('894374302:AAE-N8TMTd3zomndSoKGoy4plTp7x7dowHE');
 
 let db = {};
+let dblist = {};
 let rLimit = 20;
 
+schedule.scheduleJob('*/1 * * * *', function() {
+    console.log(JSON.parse(db));
+    const options = 'top.json?t=day&limit=5';
+    var start = new Date();
+    if(db.length !== 0)
+        for (var i = 0, len = db.length; i < len; i++) {
+            if( db[i][schedule] === true)
+                db[i][lista].split(',').forEach(function (subreddit) {
+                    let messageId = db[userId].replace('id_', '');
+
+                    console.log(`http://www.reddit.com/r/${subreddit}/${options}`);
+                    //sendPlsWait(messageId);
+                    rp({uri: `http://www.reddit.com/r/${subreddit}/${options}`, json: true})
+                        .then(function (body) {
+                            body.data.children.forEach(function (post) {
+
+                                // reddit post data
+                                let redditPost = post.data;
+                                redditPost.title = redditPost.title.replace(/&amp;/g, '&');
+
+                                // inline buttons
+                                const markup = bot.inlineKeyboard([
+                                    [
+                                        bot.inlineButton('🌐 Reddit', {url: `https://www.reddit.com${redditPost.permalink}`}),
+                                    ]
+                                ]);
+
+                                // if post is an image or if it's a gif or a link
+                                if (/\.(jpe?g|png)$/.test(redditPost.url) ||
+                                    redditPost.domain === 'i.reddituploads.com' ||
+                                    redditPost.domain === 'i.redd.it') {
+                                    // sendPlsWait(messageId);
+                                    return sendImagePost(messageId, redditPost, markup);
+                                } else if (redditPost.preview && redditPost.preview.images[0].variants.mp4) {
+                                    // sendPlsWait(messageId);
+                                    if (isGfycatPost(redditPost))
+                                        return sendGfycatPost(messageId, redditPost, markup);
+                                    else
+                                        return sendGifPost(messageId, redditPost, markup);
+                                } else {
+                                    if (isImgurPost(redditPost))
+                                        return sendImgurPost(messageId, redditPost, markup);
+                                    else
+                                        return sendMessagePost(messageId, redditPost, markup);
+                                }
+                            });
+                        })
+                        .catch(function (err) {
+                            console.log(err);
+                            return sendErrorMsg(messageId);
+                        });
+                });
+        }
+});
+
 function updateUser(userId, subreddit, option, postNum) {
-    db[userId] = {subreddit, option, postNum};
+    let list = '';
+    let schedule = false;
+    db[userId] = {subreddit, option, postNum, list, schedule};
+}
+
+function sendRedditPostfromList(messageId) {
+    //const messageId = db[userId].replace('id_','');
+    const options = 'top.json?t=day&limit=5';
+    var start = new Date();
+    db[`id_${messageId}`]['list'].split(',').forEach(function(subreddit) {
+
+        console.log(`http://www.reddit.com/r/${subreddit}/${options}`);
+        //sendPlsWait(messageId);
+        rp({uri: `http://www.reddit.com/r/${subreddit}/${options}`, json: true})
+            .then(function (body) {
+                body.data.children.forEach(function (post) {
+
+                    // reddit post data
+                    let redditPost = post.data;
+                    redditPost.title = redditPost.title.replace(/&amp;/g, '&');
+
+                    // inline buttons
+                    const markup = bot.inlineKeyboard([
+                        [
+                            bot.inlineButton('🌐 Reddit', {url: `https://www.reddit.com${redditPost.permalink}`}),
+                        ]
+                    ]);
+
+                    // if post is an image or if it's a gif or a link
+                    if (/\.(jpe?g|png)$/.test(redditPost.url) ||
+                        redditPost.domain === 'i.reddituploads.com' ||
+                        redditPost.domain === 'i.redd.it') {
+                        // sendPlsWait(messageId);
+                        return sendImagePost(messageId, redditPost, markup);
+                    } else if (redditPost.preview && redditPost.preview.images[0].variants.mp4) {
+                        // sendPlsWait(messageId);
+                        if (isGfycatPost(redditPost))
+                            return sendGfycatPost(messageId, redditPost, markup);
+                        else
+                            return sendGifPost(messageId, redditPost, markup);
+                    } else {
+                        if (isImgurPost(redditPost))
+                            return sendImgurPost(messageId, redditPost, markup);
+                        else
+                            return sendMessagePost(messageId, redditPost, markup);
+                    }
+                });
+            })
+            .catch(function (err) {
+                console.log(err);
+                return sendErrorMsg(messageId);
+            });
+
+    });
 }
 
 function sendRedditPost(messageId, subreddit, option, postNum) {
@@ -45,12 +154,15 @@ function sendRedditPost(messageId, subreddit, option, postNum) {
                 return sendImagePost(messageId, redditPost, markup);
             } else if (redditPost.preview && redditPost.preview.images[0].variants.mp4) {
                 // sendPlsWait(messageId);
-                if(!isGfycatPost(redditPost))
-                    sendGifPost(messageId, redditPost, markup);
+                if(isGfycatPost(redditPost))
+                    return sendGfycatPost(messageId, redditPost, markup);
                 else
-                    sendGfycatPost(messageId, redditPost, markup)
+                    return sendGifPost(messageId, redditPost, markup);
             } else {
-                return sendMessagePost(messageId, redditPost, markup);
+                if (isImgurPost(redditPost))
+                    return sendImgurPost(messageId, redditPost, markup);
+                else
+                    return sendMessagePost(messageId, redditPost, markup);
             }
         })
         .catch(function (err) {
@@ -128,6 +240,17 @@ function isGfycatPost(redditPost) {
     return false
 }
 
+function isImgurPost(redditPost) {
+    let url = redditPost.url.replace('http://','').replace('https://','').replace('www.','').split(/[/?#]/)[0];
+    return url === 'imgur.com' || url === 'i.imgur.com';
+}
+
+function sendImgurPost(messageId, redditPost, markup) {
+    let gif= redditPost.url.replace('.gifv', '.mp4');
+    const caption = redditPost.title;
+    return bot.sendVideo(messageId, gif, {caption, markup});
+}
+
 function sendGfycatPost(messageId, redditPost, markup) {
     let gifArr = redditPost.media.oembed.thumbnail_url;
     let gif = gifArr.substring(26).replace('-size_restricted.gif', '.mp4');
@@ -151,11 +274,20 @@ ${url}`;
     return bot.sendMessage(messageId, message, {markup});
 }
 
+function getList(messageId,userId){
+    const Msg = `Your list:
+    ${db[userId]['list'].replace("\n",",")}`;
+    return bot.sendMessage(messageId, Msg);
+}
+
 
 bot.on('text', msg => {
     const parse = "Markdown";
-    if (msg.text === '/start' || msg.text === '/help') {
-        const message = `Enter a subreddit name with an option:
+    let numberOfCommas = (msg.text.match(/,/g)||[]).length;
+    let message = '';
+    switch (msg.text) {
+        case '/start':
+            message = `Enter a subreddit name with an option:
 
 *top:* Top posts from past day
 *topw:* Top posts from past week
@@ -168,9 +300,53 @@ bot.on('text', msg => {
 For example if you want to get top posts of \`/r/cats\` enter:
 *cats top*
 
-Default option is *top*, so *cats* will return top posts of \`/r/cats\` from past day.`
-        return bot.sendMessage(msg.from.id, message, {parse});
-    } else {
+Default option is *top*, so *cats* will return top posts of \`/r/cats\` from past day.
+
+/list makes a scheduled subreddit list, it'll send you the top 5 subreddit's post every 12 hours.`
+            return bot.sendMessage(msg.from.id, message, {parse});
+        case '/help':
+            message = `Enter a subreddit name with an option:
+
+*top:* Top posts from past day
+*topw:* Top posts from past week
+*topm:* Top posts from past month
+*topy:* Top posts from past year
+*all:* Top posts of all time
+*hot:* Hot posts right now 
+*new:* Latest posts
+
+For example if you want to get top posts of \`/r/cats\` enter:
+*cats top*
+
+Default option is *top*, so *cats* will return top posts of \`/r/cats\` from past day.
+
+/list makes a scheduled subreddit list, it'll send you the top 5 subreddit's post every 12 hours.`
+            return bot.sendMessage(msg.from.id, message, {parse});
+        case '/list':
+            if(!db[`id_${msg.from.id}`])
+                updateUser(`id_${msg.from.id}`, '', '', '');
+
+            message = `OK. Send me a list of subreddits. You can update this list anytime. Please use this format:
+        
+dogs,cats,dankmemes,memes
+        `;
+            if(db[`id_${msg.from.id}`]['list']) {
+                return getList(msg.from.id, `id_${msg.from.id}`);
+            }else
+                return bot.sendMessage(msg.from.id, message, {parse});
+    }
+
+    if(numberOfCommas >= 1) {
+        const userId = `id_${msg.from.id}`;
+        const messageId = msg.from.id;
+        updateUser(userId, '', '', '');
+        db[userId]['list'] =  msg.text;
+        db[userId]['schedule'] = true;
+        const message = `List updated.`;
+        bot.sendMessage(msg.from.id, message, {parse});
+        getList(messageId,userId);
+        sendRedditPostfromList(messageId)
+    } else if(msg.text.substring(0,1) !== '/') {
         const userId = `id_${msg.from.id}`;
         const messageId = msg.from.id;
         const [subreddit, option] = msg.text.toLowerCase().split(' ');
@@ -178,7 +354,10 @@ Default option is *top*, so *cats* will return top posts of \`/r/cats\` from pas
         sendPlsWait(messageId);
         updateUser(userId, subreddit, option, postNum);
         sendRedditPost(messageId, subreddit, option, postNum);
+    }else{
+        sendTryAgainMsg(msg.from.id)
     }
+
 });
 
 bot.on('callbackQuery', msg => {
