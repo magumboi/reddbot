@@ -8,7 +8,7 @@ let db = {};
 let dblist = {};
 let rLimit = 20;
 
-schedule.scheduleJob('*/1 * * * *', function() {
+/*schedule.scheduleJob('*!/1 * * * *', function() {
     console.log(JSON.parse(db));
     const options = 'top.json?t=day&limit=5';
     var start = new Date();
@@ -61,7 +61,7 @@ schedule.scheduleJob('*/1 * * * *', function() {
                         });
                 });
         }
-});
+});*/
 
 function updateUser(userId, subreddit, option, postNum) {
     let list = '';
